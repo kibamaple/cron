@@ -1,5 +1,5 @@
 // Package cron implements a cron spec parser and runner.
-package cron // import "gopkg.in/robfig/cron.v2"
+package cron 
 
 import (
 	"sort"
@@ -21,7 +21,7 @@ type Cron struct {
 
 // Job is an interface for submitted cron jobs.
 type Job interface {
-	Run()
+	Run(time.Time)
 }
 
 // Schedule describes a job's duty cycle.
@@ -29,6 +29,7 @@ type Schedule interface {
 	// Next returns the next activation time, later than the given time.
 	// Next is invoked initially, and then each time the job is run.
 	Next(time.Time) time.Time
+	Prev(time.Time) time.Time
 }
 
 // EntryID identifies an entry within a Cron instance
@@ -89,12 +90,12 @@ func New() *Cron {
 }
 
 // FuncJob is a wrapper that turns a func() into a cron.Job
-type FuncJob func()
+type FuncJob func(t time.Time)
 
-func (f FuncJob) Run() { f() }
+func (f FuncJob) Run(t time.Time) { f(t) }
 
 // AddFunc adds a func to the Cron to be run on the given schedule.
-func (c *Cron) AddFunc(spec string, cmd func()) (EntryID, error) {
+func (c *Cron) AddFunc(spec string, cmd func(t time.Time)) (EntryID, error) {
 	return c.AddJob(spec, FuncJob(cmd))
 }
 
@@ -186,7 +187,7 @@ func (c *Cron) run() {
 				if e.Next != effective {
 					break
 				}
-				go e.Job.Run()
+				go e.Job.Run(effective)
 				e.Prev = e.Next
 				e.Next = e.Schedule.Next(effective)
 			}

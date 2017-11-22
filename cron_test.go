@@ -32,7 +32,7 @@ func TestStopCausesJobsToNotRun(t *testing.T) {
 	cron := New()
 	cron.Start()
 	cron.Stop()
-	cron.AddFunc("* * * * * ?", func() { wg.Done() })
+	cron.AddFunc("* * * * * ?", func(ti time.Time) { wg.Done() })
 
 	select {
 	case <-time.After(ONE_SECOND):
@@ -48,7 +48,7 @@ func TestAddBeforeRunning(t *testing.T) {
 	wg.Add(1)
 
 	cron := New()
-	cron.AddFunc("* * * * * ?", func() { wg.Done() })
+	cron.AddFunc("* * * * * ?", func(ti time.Time) { wg.Done() })
 	cron.Start()
 	defer cron.Stop()
 
@@ -68,7 +68,7 @@ func TestAddWhileRunning(t *testing.T) {
 	cron := New()
 	cron.Start()
 	defer cron.Stop()
-	cron.AddFunc("* * * * * ?", func() { wg.Done() })
+	cron.AddFunc("* * * * * ?", func(ti time.Time) { wg.Done() })
 
 	select {
 	case <-time.After(ONE_SECOND):
@@ -83,7 +83,7 @@ func TestRemoveBeforeRunning(t *testing.T) {
 	wg.Add(1)
 
 	cron := New()
-	id, _ := cron.AddFunc("* * * * * ?", func() { wg.Done() })
+	id, _ := cron.AddFunc("* * * * * ?", func(ti time.Time) { wg.Done() })
 	cron.Remove(id)
 	cron.Start()
 	defer cron.Stop()
@@ -104,7 +104,7 @@ func TestRemoveWhileRunning(t *testing.T) {
 	cron := New()
 	cron.Start()
 	defer cron.Stop()
-	id, _ := cron.AddFunc("* * * * * ?", func() { wg.Done() })
+	id, _ := cron.AddFunc("* * * * * ?", func(ti time.Time) { wg.Done() })
 	cron.Remove(id)
 
 	select {
@@ -120,7 +120,7 @@ func TestSnapshotEntries(t *testing.T) {
 	wg.Add(1)
 
 	cron := New()
-	cron.AddFunc("@every 2s", func() { wg.Done() })
+	cron.AddFunc("@every 2s", func(ti time.Time) { wg.Done() })
 	cron.Start()
 	defer cron.Stop()
 
@@ -148,12 +148,12 @@ func TestMultipleEntries(t *testing.T) {
 	wg.Add(2)
 
 	cron := New()
-	cron.AddFunc("0 0 0 1 1 ?", func() {})
-	cron.AddFunc("* * * * * ?", func() { wg.Done() })
-	id1, _ := cron.AddFunc("* * * * * ?", func() { t.Fatal() })
-	id2, _ := cron.AddFunc("* * * * * ?", func() { t.Fatal() })
-	cron.AddFunc("0 0 0 31 12 ?", func() {})
-	cron.AddFunc("* * * * * ?", func() { wg.Done() })
+	cron.AddFunc("0 0 0 1 1 ?", func(ti time.Time) {})
+	cron.AddFunc("* * * * * ?", func(ti time.Time) { wg.Done() })
+	id1, _ := cron.AddFunc("* * * * * ?", func(ti time.Time) { t.Fatal() })
+	id2, _ := cron.AddFunc("* * * * * ?", func(ti time.Time) { t.Fatal() })
+	cron.AddFunc("0 0 0 31 12 ?", func(ti time.Time) {})
+	cron.AddFunc("* * * * * ?", func(ti time.Time) { wg.Done() })
 
 	cron.Remove(id1)
 	cron.Start()
@@ -173,9 +173,9 @@ func TestRunningJobTwice(t *testing.T) {
 	wg.Add(2)
 
 	cron := New()
-	cron.AddFunc("0 0 0 1 1 ?", func() {})
-	cron.AddFunc("0 0 0 31 12 ?", func() {})
-	cron.AddFunc("* * * * * ?", func() { wg.Done() })
+	cron.AddFunc("0 0 0 1 1 ?", func(ti time.Time) {})
+	cron.AddFunc("0 0 0 31 12 ?", func(ti time.Time) {})
+	cron.AddFunc("* * * * * ?", func(ti time.Time) { wg.Done() })
 
 	cron.Start()
 	defer cron.Stop()
@@ -192,12 +192,12 @@ func TestRunningMultipleSchedules(t *testing.T) {
 	wg.Add(2)
 
 	cron := New()
-	cron.AddFunc("0 0 0 1 1 ?", func() {})
-	cron.AddFunc("0 0 0 31 12 ?", func() {})
-	cron.AddFunc("* * * * * ?", func() { wg.Done() })
-	cron.Schedule(Every(time.Minute), FuncJob(func() {}))
-	cron.Schedule(Every(time.Second), FuncJob(func() { wg.Done() }))
-	cron.Schedule(Every(time.Hour), FuncJob(func() {}))
+	cron.AddFunc("0 0 0 1 1 ?", func(ti time.Time) {})
+	cron.AddFunc("0 0 0 31 12 ?", func(ti time.Time) {})
+	cron.AddFunc("* * * * * ?", func(ti time.Time) { wg.Done() })
+	cron.Schedule(Every(time.Minute), FuncJob(func(ti time.Time) {}))
+	cron.Schedule(Every(time.Second), FuncJob(func(ti time.Time) { wg.Done() }))
+	cron.Schedule(Every(time.Hour), FuncJob(func(ti time.Time) {}))
 
 	cron.Start()
 	defer cron.Stop()
@@ -219,7 +219,7 @@ func TestLocalTimezone(t *testing.T) {
 		now.Second()+1, now.Minute(), now.Hour(), now.Day(), now.Month())
 
 	cron := New()
-	cron.AddFunc(spec, func() { wg.Done() })
+	cron.AddFunc(spec, func(ti time.Time) { wg.Done() })
 	cron.Start()
 	defer cron.Stop()
 
@@ -235,7 +235,7 @@ type testJob struct {
 	name string
 }
 
-func (t testJob) Run() {
+func (t testJob) Run(ti time.Time) {
 	t.wg.Done()
 }
 
