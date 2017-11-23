@@ -163,7 +163,7 @@ func (s *SpecSchedule) Prev(t time.Time) time.Time {
 	t = t.In(s.Location)
 
 	// Start at the earliest possible time (the upcoming second).
-	t = t.Add(1*time.Second - time.Duration(t.Nanosecond())*time.Nanosecond)
+	t = t.Add(time.Duration(t.Nanosecond())*time.Nanosecond-1*time.Second)
 
 	// This flag indicates whether a field has been incremented.
 	added := false
@@ -183,12 +183,14 @@ PWRAP:
 		if !added {
 			added = true
 			// Otherwise, set the date at the beginning (since the current time is irrelevant).
-			t = time.Date(t.Year(), t.Month(), 1, 0, 0, 0, 0, s.Location)
+			t = time.Date(t.Year(), t.Month(), 1, 23, 59, 59, 0, s.Location)
+			t = t.AddDate(0, 0, -1)
+		}else{
+			t = t.AddDate(0, -1, 0)
 		}
-		t = t.AddDate(0, -1, 0)
 
 		// Wrapped around.
-		if t.Month() == time.January {
+		if t.Month() == time.December {
 			goto PWRAP
 		}
 	}
@@ -197,11 +199,12 @@ PWRAP:
 	for !dayMatches(s, t) {
 		if !added {
 			added = true
-			t = time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, s.Location)
+			t = time.Date(t.Year(), t.Month(), t.Day(), 23, 59, 59, 0, s.Location)
 		}
+		m := t.Month()
 		t = t.AddDate(0, 0, -1)
 
-		if t.Day() == 1 {
+		if t.Month() != m {
 			goto PWRAP
 		}
 	}
@@ -210,10 +213,12 @@ PWRAP:
 		if !added {
 			added = true
 			t = t.Truncate(time.Hour)
+			t = t.Add(-1 * time.Second)
+		}else{
+			t = t.Add(-1 * time.Hour)
 		}
-		t = t.Add(-1 * time.Hour)
 
-		if t.Hour() == 0 {
+		if t.Hour() == 23 {
 			goto PWRAP
 		}
 	}
@@ -222,10 +227,12 @@ PWRAP:
 		if !added {
 			added = true
 			t = t.Truncate(time.Minute)
+			t = t.Add(-1 * time.Second)
+		}else{
+			t = t.Add(-1 * time.Minute)
 		}
-		t = t.Add(-1 * time.Minute)
 
-		if t.Minute() == 0 {
+		if t.Minute() == 59 {
 			goto PWRAP
 		}
 	}
@@ -237,7 +244,7 @@ PWRAP:
 		}
 		t = t.Add(-1 * time.Second)
 
-		if t.Second() == 0 {
+		if t.Second() == 59 {
 			goto PWRAP
 		}
 	}
