@@ -1,6 +1,8 @@
 package cron
 
-import "time"
+import (
+	"time"
+)
 
 // SpecSchedule specifies a duty cycle (to the second granularity), based on a
 // traditional crontab specification. It is computed initially and stored as bit sets.
@@ -179,15 +181,9 @@ PWRAP:
 	// Find the first applicable month.
 	// If it's this month, then do nothing.
 	for 1<<uint(t.Month())&s.Month == 0 {
-		// If we have to add a month, reset the other parts to 0.
-		if !added {
-			added = true
-			// Otherwise, set the date at the beginning (since the current time is irrelevant).
-			t = time.Date(t.Year(), t.Month(), 1, 23, 59, 59, 0, s.Location)
-			t = t.AddDate(0, 0, -1)
-		}else{
-			t = t.AddDate(0, -1, 0)
-		}
+		
+		t = time.Date(t.Year(), t.Month(), 1, 23, 59, 59, 0, s.Location)
+		t = t.AddDate(0, 0, -1)
 
 		// Wrapped around.
 		if t.Month() == time.December {
