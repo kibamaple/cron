@@ -6,6 +6,7 @@ import "time"
 // traditional crontab specification. It is computed initially and stored as bit sets.
 type SpecSchedule struct {
 	Second, Minute, Hour, Dom, Month, Dow uint64
+	Location                              *time.Location
 }
 
 // bounds provides a range of acceptable values (plus a map of name to value).
@@ -50,8 +51,6 @@ const (
 	starBit = 1 << 63
 )
 
-// Next returns the next time this schedule is activated, greater than the given
-// time.  If no time can be found to satisfy the schedule, return the zero time.
 func (s *SpecSchedule) Next(t time.Time) time.Time {
 	// General approach:
 	// For Month, Day, Hour, Minute, Second:
@@ -60,6 +59,11 @@ func (s *SpecSchedule) Next(t time.Time) time.Time {
 	// While incrementing the field, a wrap-around brings it back to the beginning
 	// of the field list (since it is necessary to re-verify previous field
 	// values)
+
+	// Convert the given time into the schedule's timezone.
+	// Save the original timezone so we can convert back after we find a time.
+	origLocation := t.Location()
+	t = t.In(s.Location)
 
 	// Start at the earliest possible time (the upcoming second).
 	t = t.Add(1*time.Second - time.Duration(t.Nanosecond())*time.Nanosecond)
@@ -70,7 +74,7 @@ func (s *SpecSchedule) Next(t time.Time) time.Time {
 	// If no time is found within five years, return zero.
 	yearLimit := t.Year() + 5
 
-WRAP:
+NWRAP:
 	if t.Year() > yearLimit {
 		return time.Time{}
 	}
@@ -82,13 +86,13 @@ WRAP:
 		if !added {
 			added = true
 			// Otherwise, set the date at the beginning (since the current time is irrelevant).
-			t = time.Date(t.Year(), t.Month(), 1, 0, 0, 0, 0, t.Location())
+			t = time.Date(t.Year(), t.Month(), 1, 0, 0, 0, 0, s.Location)
 		}
 		t = t.AddDate(0, 1, 0)
 
 		// Wrapped around.
 		if t.Month() == time.January {
-			goto WRAP
+			goto NWRAP
 		}
 	}
 
@@ -96,24 +100,24 @@ WRAP:
 	for !dayMatches(s, t) {
 		if !added {
 			added = true
-			t = time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, t.Location())
+			t = time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, s.Location)
 		}
 		t = t.AddDate(0, 0, 1)
 
 		if t.Day() == 1 {
-			goto WRAP
+			goto NWRAP
 		}
 	}
 
 	for 1<<uint(t.Hour())&s.Hour == 0 {
 		if !added {
 			added = true
-			t = time.Date(t.Year(), t.Month(), t.Day(), t.Hour(), 0, 0, 0, t.Location())
+			t = t.Truncate(time.Hour)
 		}
 		t = t.Add(1 * time.Hour)
 
 		if t.Hour() == 0 {
-			goto WRAP
+			goto NWRAP
 		}
 	}
 
@@ -125,7 +129,7 @@ WRAP:
 		t = t.Add(1 * time.Minute)
 
 		if t.Minute() == 0 {
-			goto WRAP
+			goto NWRAP
 		}
 	}
 
@@ -137,11 +141,109 @@ WRAP:
 		t = t.Add(1 * time.Second)
 
 		if t.Second() == 0 {
-			goto WRAP
+			goto NWRAP
 		}
 	}
 
-	return t
+	return t.In(origLocation)
+}
+
+func (s *SpecSchedule) Prev(t time.Time) time.Time {
+	// General approach:
+	// For Month, Day, Hour, Minute, Second:
+	// Check if the time value matches.  If yes, continue to the next field.
+	// If the field doesn't match the schedule, then increment the field until it matches.
+	// While incrementing the field, a wrap-around brings it back to the beginning
+	// of the field list (since it is necessary to re-verify previous field
+	// values)
+
+	// Convert the given time into the schedule's timezone.
+	// Save the original timezone so we can convert back after we find a time.
+	origLocation := t.Location()
+	t = t.In(s.Location)
+
+	// Start at the earliest possible time (the upcoming second).
+	t = t.Add(time.Duration(t.Nanosecond())*time.Nanosecond-1*time.Second)
+
+	// This flag indicates whether a field has been incremented.
+	added := false
+
+	// If no time is found within five years, return zero.
+	yearLimit := t.Year() - 5
+
+PWRAP:
+	if t.Year() < yearLimit {
+		return time.Time{}
+	}
+
+	// Find the first applicable month.
+	// If it's this month, then do nothing.
+	for 1<<uint(t.Month())&s.Month == 0 {
+		
+		t = time.Date(t.Year(), t.Month(), 1, 23, 59, 59, 0, s.Location)
+		t = t.AddDate(0, 0, -1)
+
+		// Wrapped around.
+		if t.Month() == time.December {
+			goto PWRAP
+		}
+	}
+
+	// Now get a day in that month.
+	for !dayMatches(s, t) {
+		if !added {
+			added = true
+			t = time.Date(t.Year(), t.Month(), t.Day(), 23, 59, 59, 0, s.Location)
+		}
+		m := t.Month()
+		t = t.AddDate(0, 0, -1)
+
+		if t.Month() != m {
+			goto PWRAP
+		}
+	}
+
+	for 1<<uint(t.Hour())&s.Hour == 0 {
+		if !added {
+			added = true
+			t = t.Truncate(time.Hour)
+			t = t.Add(-1 * time.Second)
+		}else{
+			t = t.Add(-1 * time.Hour)
+		}
+
+		if t.Hour() == 23 {
+			goto PWRAP
+		}
+	}
+
+	for 1<<uint(t.Minute())&s.Minute == 0 {
+		if !added {
+			added = true
+			t = t.Truncate(time.Minute)
+			t = t.Add(-1 * time.Second)
+		}else{
+			t = t.Add(-1 * time.Minute)
+		}
+
+		if t.Minute() == 59 {
+			goto PWRAP
+		}
+	}
+
+	for 1<<uint(t.Second())&s.Second == 0 {
+		if !added {
+			added = true
+			t = t.Truncate(time.Second)
+		}
+		t = t.Add(-1 * time.Second)
+
+		if t.Second() == 59 {
+			goto PWRAP
+		}
+	}
+
+	return t.In(origLocation)
 }
 
 // dayMatches returns true if the schedule's day-of-week and day-of-month
